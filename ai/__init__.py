@@ -1,0 +1,1 @@
+"""AI integration layer (IBM Bob-assisted workflow + optional runtime LLM)."""

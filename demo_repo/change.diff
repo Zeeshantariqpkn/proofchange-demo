@@ -1,0 +1,15 @@
+diff --git a/src/pricing.py b/src/pricing.py
+--- a/src/pricing.py
++++ b/src/pricing.py
+@@ -1,8 +1,12 @@
+ """Pricing rules for the demo repository."""
+ 
+ 
+ def calculate_discount(price, customer_type):
+     if customer_type == "premium":
+         return price * 0.80
+ 
++    if customer_type == "vip":
++        return price * 0.70
++
+     return price

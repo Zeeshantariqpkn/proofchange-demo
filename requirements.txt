@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+streamlit
+requests
+GitPython
+pytest
+python-dotenv
+cryptography>=43.0.0
