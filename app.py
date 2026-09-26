@@ -463,10 +463,11 @@ elif page == "Live PR Test":
     _cfg_ok = bool(_app_id and _key_path and _install_id and _os.path.exists(_key_path))
 
     if not _cfg_ok:
-        st.error(
-            "GitHub App credentials are not configured. Fill in "
-            "`GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY_PATH`, and "
-            "`GITHUB_INSTALLATION_ID` in your `.env` file."
+        st.info(
+            "**GitHub App not configured** — Live PR analysis requires a GitHub App. "
+            "To enable it, add `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY_PATH`, and "
+            "`GITHUB_INSTALLATION_ID` to your Streamlit Cloud secrets (or local `.env`). "
+            "The rest of the dashboard works without these credentials."
         )
     else:
         st.success(
