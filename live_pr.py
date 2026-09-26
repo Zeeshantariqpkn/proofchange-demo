@@ -50,18 +50,22 @@ def run_live_pr_analysis(
             progress(msg)
 
     # --- Validate configuration ---
+    # Accepts GITHUB_PRIVATE_KEY env var (Streamlit Cloud) or
+    # GITHUB_PRIVATE_KEY_PATH pointing to a .pem file (local).
     app_id = os.environ.get("GITHUB_APP_ID", "").strip()
+    key_str = os.environ.get("GITHUB_PRIVATE_KEY", "").strip()
     key_path = os.environ.get("GITHUB_PRIVATE_KEY_PATH", "").strip()
     install_id = os.environ.get("GITHUB_INSTALLATION_ID", "").strip()
 
-    if not (app_id and key_path and install_id):
+    key_ok = bool(key_str) or (bool(key_path) and os.path.exists(key_path))
+
+    if not (app_id and install_id and key_ok):
         raise LivePRError(
             "GitHub App credentials are not configured. "
-            "Set GITHUB_APP_ID, GITHUB_PRIVATE_KEY_PATH, and "
-            "GITHUB_INSTALLATION_ID in .env"
+            "Set GITHUB_APP_ID, GITHUB_INSTALLATION_ID, and either "
+            "GITHUB_PRIVATE_KEY (Streamlit Cloud secrets) or "
+            "GITHUB_PRIVATE_KEY_PATH (local .env)."
         )
-    if not os.path.exists(key_path):
-        raise LivePRError(f"Private key not found at {key_path}")
 
     # --- Lazy imports so the Streamlit app boots fast ---
     from github.auth import get_installation_token
