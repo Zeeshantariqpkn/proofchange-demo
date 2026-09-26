@@ -885,17 +885,34 @@ _LANDING_HTML = """\
 def landing_page() -> bool:
     """Render the full premium landing page.
 
-    Returns True the moment the user clicks any "Open Dashboard" button.
-    Uses st.components.v1.html so the page renders at full fidelity in its
-    own iframe.  The iframe posts a message to the Streamlit host; the host
-    reads it back through the component's return value.
+    Returns True the moment the user clicks the "Open Dashboard" button.
+    Renders the landing page HTML directly via st.markdown (no iframe) so
+    it works reliably on Streamlit Cloud, then uses a native st.button for
+    the launch action.
     """
-    import streamlit.components.v1 as components
+    import re as _re
 
-    launched: bool = components.html(
-        _LANDING_HTML,
-        height=6200,   # tall enough for the full page; scrollable internally
-        scrolling=True,
+    html = _LANDING_HTML
+    # Remove outer document shell — keep only what's inside <body>
+    body_match = _re.search(r"<body>([\s\S]*)</body>", html)
+    html = body_match.group(1) if body_match else html
+    # Extract <style> block and re-wrap it so CSS applies inline
+    style_match = _re.search(r"(<style>[\s\S]*?</style>)", _LANDING_HTML)
+    style_tag = style_match.group(1) if style_match else ""
+    # Remove <script> block — button is native
+    html = _re.sub(r"<script[\s\S]*?</script>", "", html)
+    # Replace launch anchor tags with plain styled spans
+    html = _re.sub(
+        r'<a ([^>]*id="(?:navLaunchBtn|heroLaunchBtn|evidenceLaunchBtn|ctaLaunchBtn|githubLaunchBtn)"[^>]*)>(.*?)</a>',
+        r'<span class="btn btn-primary">\2</span>',
+        html,
     )
-    # components.html returns the value posted via setComponentValue
-    return bool(launched)
+    st.markdown(style_tag + html, unsafe_allow_html=True)
+    # Single native Streamlit button — works on every deployment
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        return st.button(
+            "🚀 Open ProofChange Dashboard",
+            use_container_width=True,
+            type="primary",
+        )
