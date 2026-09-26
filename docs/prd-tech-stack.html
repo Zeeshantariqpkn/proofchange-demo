@@ -1,0 +1,383 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ProofChange — PRD &amp; Tech Stack</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --ink:#0f172a;--muted:#475569;--border:#e2e8f0;--bg:#f8fafc;
+    --accent:#2563eb;--accent-soft:#eff6ff;--good:#059669;--good-soft:#ecfdf5;
+    --warn:#d97706;--bad:#dc2626;--purple:#7c3aed;--purple-soft:#f5f3ff;
+    --radius:10px;--shadow:0 1px 4px rgba(0,0,0,.06);
+  }
+  body{font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:14px;
+       line-height:1.65;color:var(--ink);background:#fff;max-width:860px;
+       margin:0 auto;padding:40px 32px 60px;}
+  /* ── HEADER ── */
+  .doc-header{border-bottom:2px solid var(--ink);padding-bottom:24px;margin-bottom:36px}
+  .doc-header .eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  .doc-header h1{font-size:2rem;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:8px}
+  .doc-header .tagline{font-size:1rem;color:var(--muted);font-style:italic}
+  .meta-row{display:flex;gap:24px;flex-wrap:wrap;margin-top:16px;font-size:.8rem;color:var(--muted)}
+  .meta-row span strong{color:var(--ink)}
+  /* ── SECTION HEADERS ── */
+  h2{font-size:1.1rem;font-weight:700;letter-spacing:-.01em;
+     margin:36px 0 14px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  h3{font-size:.95rem;font-weight:600;margin:20px 0 8px;color:var(--ink)}
+  h4{font-size:.85rem;font-weight:600;margin:14px 0 6px;color:var(--muted);
+     text-transform:uppercase;letter-spacing:.06em}
+  p{margin-bottom:10px;color:#1e293b}
+  /* ── CALLOUT ── */
+  .callout{background:var(--accent-soft);border-left:3px solid var(--accent);
+           border-radius:0 var(--radius) var(--radius) 0;padding:14px 18px;
+           margin:16px 0;font-size:.9rem}
+  .callout.purple{background:var(--purple-soft);border-color:var(--purple)}
+  .callout strong{color:var(--accent)}
+  .callout.purple strong{color:var(--purple)}
+  /* ── TABLES ── */
+  table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:.83rem}
+  th{background:var(--bg);font-weight:600;text-align:left;
+     padding:8px 12px;border:1px solid var(--border);color:var(--muted);
+     font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:8px 12px;border:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:#fafbfc}
+  /* ── BADGES ── */
+  .badge{display:inline-block;padding:2px 9px;border-radius:100px;
+         font-size:.7rem;font-weight:600;letter-spacing:.04em;white-space:nowrap}
+  .badge-blue{background:var(--accent-soft);color:var(--accent);border:1px solid #bfdbfe}
+  .badge-green{background:var(--good-soft);color:var(--good);border:1px solid #a7f3d0}
+  .badge-purple{background:var(--purple-soft);color:var(--purple);border:1px solid #ddd6fe}
+  .badge-orange{background:#fffbeb;color:var(--warn);border:1px solid #fde68a}
+  .badge-red{background:#fef2f2;color:var(--bad);border:1px solid #fecaca}
+  .badge-gray{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  /* ── PIPELINE FLOW ── */
+  .pipeline{display:flex;flex-direction:column;gap:0;margin:16px 0 24px}
+  .pipe-step{display:grid;grid-template-columns:32px 1fr;gap:12px;align-items:start;
+             padding:10px 0}
+  .pipe-step:not(:last-child){border-bottom:1px dashed var(--border)}
+  .pipe-num{width:28px;height:28px;border-radius:8px;background:var(--accent);
+            color:#fff;font-size:.75rem;font-weight:700;display:flex;
+            align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+  .pipe-content h4{margin:0 0 2px;font-size:.85rem;font-weight:600;color:var(--ink);
+                   text-transform:none;letter-spacing:0}
+  .pipe-content p{margin:0;font-size:.82rem;color:var(--muted)}
+  .pipe-content .module{font-family:"SF Mono","Cascadia Code",monospace;
+                        font-size:.75rem;color:var(--accent);margin-top:3px;display:block}
+  /* ── STACK GRID ── */
+  .stack-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 24px}
+  .stack-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
+              padding:14px 16px}
+  .stack-card h4{font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;
+                 color:var(--muted);margin:0 0 8px}
+  .stack-card ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+  .stack-card li{font-size:.83rem;display:flex;align-items:baseline;gap:7px}
+  .stack-card li::before{content:"·";color:var(--accent);font-weight:700;flex-shrink:0}
+  .stack-card li strong{color:var(--ink);min-width:110px;display:inline-block}
+  /* ── EVIDENCE LEVELS ── */
+  .levels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0 20px}
+  .level-card{border-radius:var(--radius);padding:14px;text-align:center;border:1px solid}
+  .level-card.strong{background:#f0fdf4;border-color:#86efac}
+  .level-card.partial{background:#fffbeb;border-color:#fde68a}
+  .level-card.insufficient{background:#fef2f2;border-color:#fecaca}
+  .level-card .label{font-size:.7rem;font-weight:700;letter-spacing:.08em;
+                     text-transform:uppercase;margin-bottom:6px}
+  .level-card.strong .label{color:var(--good)}
+  .level-card.partial .label{color:var(--warn)}
+  .level-card.insufficient .label{color:var(--bad)}
+  .level-card p{font-size:.78rem;color:var(--muted);margin:0}
+  /* ── DIVIDER ── */
+  hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+  /* ── FOOTER ── */
+  .doc-footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);
+              text-align:center;font-size:.75rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+
+<div class="doc-header">
+  <div class="eyebrow">Product Requirements Document</div>
+  <h1>ProofChange</h1>
+  <div class="tagline">AI Change Verification for Software Teams</div>
+  <div class="meta-row">
+    <span><strong>Version</strong> 1.0</span>
+    <span><strong>Track</strong> IBM Bob Hackathon 2026</span>
+    <span><strong>Branch</strong> add-vip-discount</span>
+    <span><strong>Status</strong> <span class="badge badge-green">Live on Streamlit Cloud</span></span>
+  </div>
+</div>
+
+
+<h2>1. Problem Statement</h2>
+<div class="callout">
+  <strong>CI answers:</strong> "Did the configured tests pass?"<br />
+  <strong>It does not answer:</strong> "Is the newly changed behavior adequately verified?"
+</div>
+<p>A pull request can introduce a new branch, a new execution path, or a new edge case while CI stays entirely green — because the existing test suite never exercises the new code. The tests were written for the old behavior. No test ever fails. The change ships unverified.</p>
+<p>This is not a test-quality problem. It is a <strong>test-coverage blindspot at the point of change</strong>, and every team that relies on CI as its only safety signal has it.</p>
+
+
+<h2>2. Solution</h2>
+<p>ProofChange is an AI-powered verification layer that closes the gap between "CI passed" and "this change is verified." Its core output is a <strong>Change Evidence Package</strong> — a structured, machine-readable artifact produced automatically for every pull request.</p>
+
+<div class="callout purple">
+  <strong>Key insight:</strong> Test generation is step 5 of 7. ProofChange first <em>proves a gap exists</em> (steps 1–4) and then <em>proves the gap is closed</em> (steps 6–7). The generated test is evidence, not the product.
+</div>
+
+
+<h2>3. Core Pipeline (8 Stages)</h2>
+<div class="pipeline">
+  <div class="pipe-step">
+    <div class="pipe-num">1</div>
+    <div class="pipe-content">
+      <h4>Diff Analysis</h4>
+      <p>Parses the unified diff — extracts changed files, line ranges, added conditionals.</p>
+      <span class="module">engine/diff_analyzer.py → DiffAnalysis</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">2</div>
+    <div class="pipe-content">
+      <h4>Code Analysis</h4>
+      <p>Python AST walk — maps functions, branches, return paths, source file paths.</p>
+      <span class="module">engine/code_analyzer.py → CodeAnalysis</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">3</div>
+    <div class="pipe-content">
+      <h4>Test Mapping</h4>
+      <p>Links existing tests to affected functions by name heuristics and docstring scan.</p>
+      <span class="module">engine/test_mapper.py → TestMap</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">4</div>
+    <div class="pipe-content">
+      <h4>Gap Detection</h4>
+      <p>Finds branches with no mapped test scenario. Promotes security-keyword branches to HIGH severity.</p>
+      <span class="module">engine/gap_detector.py → list[TestGap]</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">5</div>
+    <div class="pipe-content">
+      <h4>Test Generation <span class="badge badge-purple" style="font-size:.65rem;margin-left:4px">IBM Bob</span></h4>
+      <p>Produces focused pytest scaffolds targeting each detected gap. Bob-assisted workflow.</p>
+      <span class="module">ai/test_generator.py → list[GeneratedTest]</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">6</div>
+    <div class="pipe-content">
+      <h4>Execution</h4>
+      <p>Runs real pytest against the generated tests. Captures pass/fail/skipped/duration.</p>
+      <span class="module">engine/runner.py → ExecutionResult</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">7</div>
+    <div class="pipe-content">
+      <h4>Impact Analysis</h4>
+      <p>Classifies affected paths as verified / partial / unresolved. Deduplicates by (source_path, fn_name).</p>
+      <span class="module">engine/impact_analyzer.py → PathSummary</span>
+    </div>
+  </div>
+  <div class="pipe-step">
+    <div class="pipe-num">8</div>
+    <div class="pipe-content">
+      <h4>Evidence Package</h4>
+      <p>Aggregates all pipeline outputs into a scored, timestamped, machine-readable artifact.</p>
+      <span class="module">engine/evidence.py → EvidencePackage (JSON + Markdown)</span>
+    </div>
+  </div>
+</div>
+
+
+<h2>4. Evidence Levels</h2>
+<div class="levels">
+  <div class="level-card strong">
+    <div class="label">✓ Strong</div>
+    <p>All gaps addressed + ≥70% paths verified + all tests passed</p>
+  </div>
+  <div class="level-card partial">
+    <div class="label">⚠ Partial</div>
+    <p>Some gaps addressed or some paths unverified</p>
+  </div>
+  <div class="level-card insufficient">
+    <div class="label">✕ Insufficient</div>
+    <p>Tests failed or gaps remain unaddressed</p>
+  </div>
+</div>
+<p style="font-size:.82rem;color:var(--muted)">Evidence level is computed by explicit, auditable rules — not an LLM opinion. Every level carries a plain-language rationale string.</p>
+
+
+<h2>5. IBM Bob 2.0 Integration</h2>
+<h3>Development Partner (IDE)</h3>
+<table>
+  <tr><th>Task</th><th>What Bob did</th><th>Files changed</th></tr>
+  <tr><td>Architecture walkthrough</td><td>Traced full pipeline module graph; produced architecture diagram</td><td>docs/architecture-diagram.md</td></tr>
+  <tr><td>Gap detector deep dive</td><td>Fixed _LITERAL_RE backreference, added _HIGH_SEVERITY_KEYWORDS</td><td>engine/gap_detector.py</td></tr>
+  <tr><td>ai_assisted_steps field</td><td>Added source_path to FunctionInfo, ai_assisted_steps to EvidencePackage</td><td>engine/models.py, evidence.py, code_analyzer.py</td></tr>
+  <tr><td>Edge-case test suite</td><td>Wrote 27 test cases across 8 classes covering AST, gap detection, severity</td><td>tests/test_engine.py</td></tr>
+  <tr><td>Code quality review</td><td>Fixed _import_line, write_generated_tests grouping, pipeline.py indentation</td><td>ai/test_generator.py, pipeline.py, github/webhook.py</td></tr>
+</table>
+
+<h3>Runtime Adapter (ai/bob_adapter.py)</h3>
+<table>
+  <tr><th>Prompt</th><th>Adapter method</th><th>Pipeline step</th></tr>
+  <tr><td>Repository Understanding</td><td>analyze_change()</td><td>Step 1–2</td></tr>
+  <tr><td>Test Gap Analysis</td><td>detect_gaps()</td><td>Step 4</td></tr>
+  <tr><td>Test Generation</td><td>generate_tests()</td><td>Step 5</td></tr>
+  <tr><td>Failure Analysis</td><td>analyze_failure()</td><td>Step 6</td></tr>
+  <tr><td>Verification Summary</td><td>create_summary()</td><td>Step 8</td></tr>
+</table>
+<p style="font-size:.82rem;color:var(--muted)">Two modes: <strong>documented_bob_workflow</strong> (default — prompts used with IBM Bob IDE, no network call) and <strong>runtime_llm</strong> (calls BOB_API_URL/chat/completions, falls back gracefully on error).</p>
+
+
+<h2>6. Use Cases</h2>
+<table>
+  <tr><th>Scenario</th><th>Who</th><th>What ProofChange prevents</th></tr>
+  <tr>
+    <td><strong>Friday deploy</strong></td>
+    <td>Backend dev shipping urgent fix</td>
+    <td>New authorization branch ships untested. GAP-001 is detected before merge, not after incident.</td>
+  </tr>
+  <tr>
+    <td><strong>Legacy service</strong></td>
+    <td>New developer, unfamiliar codebase</td>
+    <td>VIP discount branch added with no test. Pipeline detects gap, generates test, produces STRONG evidence.</td>
+  </tr>
+  <tr>
+    <td><strong>Compliance audit</strong></td>
+    <td>Compliance / security team</td>
+    <td>Auditor needs evidence of change verification. EvidencePackage JSON is a byproduct of every PR — no retrospective authoring needed.</td>
+  </tr>
+</table>
+
+
+<h2>7. Technology Stack</h2>
+<div class="stack-grid">
+  <div class="stack-card">
+    <h4>Frontend / UI</h4>
+    <ul>
+      <li><strong>Streamlit ≥1.32</strong> Dashboard UI, 8 navigation pages</li>
+      <li><strong>HTML + CSS</strong> Custom landing page, injected via st.markdown</li>
+      <li><strong>Streamlit Cloud</strong> Hosting and deployment</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>Core Engine</h4>
+    <ul>
+      <li><strong>Python 3.11</strong> Primary language</li>
+      <li><strong>ast (stdlib)</strong> AST-based code analysis — no regex</li>
+      <li><strong>subprocess</strong> Real pytest execution via runner</li>
+      <li><strong>dataclasses</strong> All engine models (typed, serializable)</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>AI / Bob</h4>
+    <ul>
+      <li><strong>IBM Bob 2.0</strong> IDE dev partner + runtime adapter</li>
+      <li><strong>BobAdapter</strong> Custom dual-mode adapter class</li>
+      <li><strong>ai/prompts.py</strong> 5 documented task prompts</li>
+      <li><strong>requests</strong> OpenAI-compatible API calls</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>GitHub Integration</h4>
+    <ul>
+      <li><strong>GitHub App</strong> App ID 5079526, Installation auth</li>
+      <li><strong>PyJWT ≥2.8</strong> RS256 JWT for App token signing</li>
+      <li><strong>GitHub REST API</strong> PRs, diffs, Check Runs</li>
+      <li><strong>HMAC-SHA256</strong> Webhook signature verification</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>API Layer</h4>
+    <ul>
+      <li><strong>FastAPI</strong> REST API and webhook endpoint</li>
+      <li><strong>Uvicorn</strong> ASGI server</li>
+      <li><strong>Pydantic ≥2.0</strong> Request/response validation</li>
+      <li><strong>python-dotenv</strong> Environment config</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>Testing &amp; CI</h4>
+    <ul>
+      <li><strong>pytest</strong> Test runner (engine tests + demo repo)</li>
+      <li><strong>GitHub Actions</strong> CI on push/PR to main</li>
+      <li><strong>27 test cases</strong> Across 8 classes in tests/</li>
+      <li><strong>GitPython</strong> Repo cloning for Live PR</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>Security</h4>
+    <ul>
+      <li><strong>cryptography ≥43</strong> Key handling</li>
+      <li><strong>Streamlit Secrets</strong> Credentials on cloud</li>
+      <li><strong>.gitignore</strong> *.pem, .env excluded from git</li>
+      <li><strong>HMAC verification</strong> All webhook payloads</li>
+    </ul>
+  </div>
+  <div class="stack-card">
+    <h4>Repo &amp; Docs</h4>
+    <ul>
+      <li><strong>GitHub</strong> github.com/Zeeshantariqpkn/proofchange-demo</li>
+      <li><strong>Mermaid</strong> Architecture diagrams in docs/</li>
+      <li><strong>Markdown</strong> README, executive summary, use cases</li>
+      <li><strong>JSON</strong> EvidencePackage persistence format</li>
+    </ul>
+  </div>
+</div>
+
+
+<h2>8. Differentiation vs. AI Test Generators</h2>
+<table>
+  <tr><th>Dimension</th><th>AI test generators</th><th>ProofChange</th></tr>
+  <tr><td><strong>Scope</strong></td><td>Whole repo or arbitrary prompt</td><td>Scoped to the specific change in the PR</td></tr>
+  <tr><td><strong>Input</strong></td><td>"Generate tests for this file"</td><td>The diff itself — change is the anchor</td></tr>
+  <tr><td><strong>Output</strong></td><td>Test code suggestions</td><td>Scored <strong>Change Evidence Package</strong></td></tr>
+  <tr><td><strong>Gap detection</strong></td><td>Not performed — tests generated speculatively</td><td>AST-driven — gaps detected <em>before</em> generation</td></tr>
+  <tr><td><strong>Execution</strong></td><td>Usually not included</td><td>Real pytest execution is a mandatory pipeline step</td></tr>
+  <tr><td><strong>Verdict</strong></td><td>None — user decides</td><td>STRONG / PARTIAL / INSUFFICIENT with auditable rationale</td></tr>
+  <tr><td><strong>AI role</strong></td><td>AI <em>is</em> the product</td><td>AI <em>assists</em> the pipeline — engine runs deterministically without it</td></tr>
+</table>
+
+
+<h2>9. Architecture Summary</h2>
+<table>
+  <tr><th>Layer</th><th>Files</th><th>Responsibility</th></tr>
+  <tr><td>Entry — UI</td><td>app.py, dashboard/components.py</td><td>Streamlit dashboard, 8 pages, landing page, session state</td></tr>
+  <tr><td>Entry — GitHub</td><td>github/webhook.py</td><td>HMAC-verified POST /webhook, PR event normalisation</td></tr>
+  <tr><td>Pipeline</td><td>pipeline.py</td><td>Orchestrates all 8 stages; shared by UI and webhook</td></tr>
+  <tr><td>Engine</td><td>engine/ (6 modules)</td><td>Diff, AST, test map, gap detect, impact, evidence</td></tr>
+  <tr><td>AI Adapter</td><td>ai/bob_adapter.py, ai/prompts.py</td><td>Dual-mode Bob integration; 5 documented prompts</td></tr>
+  <tr><td>GitHub Client</td><td>github/client.py, auth.py, checks.py, repo.py</td><td>REST API, App token, Check Run posting, repo cloning</td></tr>
+  <tr><td>API</td><td>api.py</td><td>FastAPI REST endpoints</td></tr>
+  <tr><td>Tests</td><td>tests/, demo_repo/tests/</td><td>27 engine tests + demo repo pricing tests</td></tr>
+  <tr><td>CI</td><td>.github/workflows/ci.yml</td><td>Compile check + pytest on push/PR to main</td></tr>
+</table>
+
+
+<h2>10. Delivery Status</h2>
+<table>
+  <tr><th>Item</th><th>Status</th></tr>
+  <tr><td>GitHub repository</td><td><span class="badge badge-green">✓ Live</span> github.com/Zeeshantariqpkn/proofchange-demo</td></tr>
+  <tr><td>Streamlit Cloud deployment</td><td><span class="badge badge-green">✓ Live</span> proofchange-demo.streamlit.app</td></tr>
+  <tr><td>Demo pipeline (VIP discount)</td><td><span class="badge badge-green">✓ Working</span> STRONG evidence end-to-end</td></tr>
+  <tr><td>Live GitHub PR analysis</td><td><span class="badge badge-green">✓ Working</span> App ID 5079526, Check Run posted</td></tr>
+  <tr><td>CI pipeline</td><td><span class="badge badge-green">✓ Passing</span> GitHub Actions on main</td></tr>
+  <tr><td>Test suite</td><td><span class="badge badge-green">✓ 27/27 passing</span> engine + demo repo</td></tr>
+  <tr><td>PRD + documentation</td><td><span class="badge badge-green">✓ Complete</span> README, executive summary, use cases, architecture</td></tr>
+</table>
+
+<div class="doc-footer">
+  ProofChange — IBM Bob Hackathon 2026  ·  Made with IBM Bob
+</div>
+
+</body>
+</html>
