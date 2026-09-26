@@ -455,12 +455,14 @@ elif page == "Live PR Test":
         "Run back to GitHub. No terminal commands needed."
     )
 
-    # Configuration check
+    # Configuration check — accepts key as file path (local) or env var (Streamlit Cloud)
     import os as _os
     _app_id = _os.environ.get("GITHUB_APP_ID", "").strip()
     _key_path = _os.environ.get("GITHUB_PRIVATE_KEY_PATH", "").strip()
+    _key_str = _os.environ.get("GITHUB_PRIVATE_KEY", "").strip()
     _install_id = _os.environ.get("GITHUB_INSTALLATION_ID", "").strip()
-    _cfg_ok = bool(_app_id and _key_path and _install_id and _os.path.exists(_key_path))
+    _key_ok = bool(_key_str) or bool(_key_path and _os.path.exists(_key_path))
+    _cfg_ok = bool(_app_id and _install_id and _key_ok)
 
     if not _cfg_ok:
         st.info(

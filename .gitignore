@@ -12,3 +12,7 @@ output/*
 # Bob AI session artifacts
 .bob/
 bob_sessions/
+
+# GitHub App private key
+private-key.pem
+*.pem
