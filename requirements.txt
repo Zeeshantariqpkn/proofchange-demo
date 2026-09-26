@@ -1,9 +1,10 @@
+streamlit>=1.32.0
 fastapi
 uvicorn
-pydantic
-streamlit
+pydantic>=2.0.0
 requests
 GitPython
 pytest
 python-dotenv
 cryptography>=43.0.0
+PyJWT>=2.8.0
