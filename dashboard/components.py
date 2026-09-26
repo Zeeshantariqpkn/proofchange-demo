@@ -886,33 +886,95 @@ def landing_page() -> bool:
     """Render the full premium landing page.
 
     Returns True the moment the user clicks the "Open Dashboard" button.
-    Renders the landing page HTML directly via st.markdown (no iframe) so
-    it works reliably on Streamlit Cloud, then uses a native st.button for
-    the launch action.
+    The native st.button is rendered at the TOP (hero position) so it is
+    immediately visible. The rest of the landing page HTML follows below.
     """
     import re as _re
 
+    # ── 1. Top hero CTA — native button, immediately visible ──────────────
+    st.markdown(
+        """
+        <style>
+        /* hide default Streamlit top padding so hero feels full-bleed */
+        .block-container{padding-top:1rem!important}
+        /* hero banner above the button */
+        .pc-landing-hero{
+            background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 60%,#3b82f6 100%);
+            border-radius:16px;padding:56px 40px 40px;text-align:center;
+            margin-bottom:0;color:#fff;
+        }
+        .pc-landing-hero .badge{
+            display:inline-block;background:rgba(255,255,255,.15);
+            border:1px solid rgba(255,255,255,.3);border-radius:100px;
+            font-size:.75rem;font-weight:600;letter-spacing:.08em;
+            text-transform:uppercase;padding:4px 14px;margin-bottom:20px;color:#fff;
+        }
+        .pc-landing-hero h1{
+            font-size:clamp(2rem,5vw,3.2rem);font-weight:700;
+            letter-spacing:-.03em;line-height:1.15;margin:0 0 16px;color:#fff;
+        }
+        .pc-landing-hero p{
+            font-size:1.1rem;color:rgba(255,255,255,.85);max-width:560px;
+            margin:0 auto 32px;line-height:1.6;
+        }
+        .pc-btn-wrap{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;
+                     padding-bottom:8px;}
+        /* style the native Streamlit primary button to match the design */
+        div[data-testid="stButton"] > button[kind="primary"]{
+            background:#fff!important;color:#1e3a8a!important;
+            border:none!important;border-radius:10px!important;
+            font-size:1rem!important;font-weight:700!important;
+            padding:14px 36px!important;box-shadow:0 4px 20px rgba(0,0,0,.18)!important;
+            letter-spacing:-.01em!important;
+        }
+        div[data-testid="stButton"] > button[kind="primary"]:hover{
+            background:#f0f7ff!important;transform:translateY(-1px);
+            box-shadow:0 8px 28px rgba(0,0,0,.22)!important;
+        }
+        </style>
+        <div class="pc-landing-hero">
+            <div class="badge">AI Change Verification</div>
+            <h1>Every code change<br>needs evidence.</h1>
+            <p>ProofChange analyzes pull requests, finds test gaps, generates
+            targeted tests, and creates a Change Evidence Package — automatically.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Native button rendered right below the hero — top of the page
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        clicked = st.button(
+            "Open ProofChange Dashboard →",
+            use_container_width=True,
+            type="primary",
+        )
+    if clicked:
+        return True
+
+    # ── 2. Rest of the landing page ────────────────────────────────────────
     html = _LANDING_HTML
-    # Remove outer document shell — keep only what's inside <body>
     body_match = _re.search(r"<body>([\s\S]*)</body>", html)
     html = body_match.group(1) if body_match else html
-    # Extract <style> block and re-wrap it so CSS applies inline
     style_match = _re.search(r"(<style>[\s\S]*?</style>)", _LANDING_HTML)
     style_tag = style_match.group(1) if style_match else ""
-    # Remove <script> block — button is native
+    # Remove script block and nav (nav has no functional buttons without JS)
     html = _re.sub(r"<script[\s\S]*?</script>", "", html)
-    # Replace launch anchor tags with plain styled spans
+    html = _re.sub(r"<nav[\s\S]*?</nav>", "", html)
+    # Remove the hero section — we already rendered our own above
+    html = _re.sub(r'<header class="hero"[\s\S]*?</header>', "", html)
+    # Remove all dead launch anchor buttons (replaced by top button)
     html = _re.sub(
         r'<a ([^>]*id="(?:navLaunchBtn|heroLaunchBtn|evidenceLaunchBtn|ctaLaunchBtn|githubLaunchBtn)"[^>]*)>(.*?)</a>',
         r'<span class="btn btn-primary">\2</span>',
         html,
     )
+    # Remove the final-cta section (redundant — button is at top)
+    html = _re.sub(
+        r'<section[^>]*>[\s\S]*?<div class="final-cta">[\s\S]*?</section>',
+        "",
+        html,
+    )
     st.markdown(style_tag + html, unsafe_allow_html=True)
-    # Single native Streamlit button — works on every deployment
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        return st.button(
-            "🚀 Open ProofChange Dashboard",
-            use_container_width=True,
-            type="primary",
-        )
+    return False
