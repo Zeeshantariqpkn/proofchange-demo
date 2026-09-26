@@ -8,11 +8,15 @@ from __future__ import annotations
 import json
 import os
 
-import streamlit as st
+import streamlit as st  
 from dotenv import load_dotenv
 
+from ai.bob_adapter import BobAdapter
+from ai.test_generator import generate_tests
 from dashboard import components as ui
 from engine import evidence as evidence_engine
+from engine.evidence import simulate_with_generated_tests
+from engine.models import FunctionInfo, TestGap
 from pipeline import run_demo_pipeline
 
 load_dotenv()
@@ -21,15 +25,46 @@ st.set_page_config(
     page_title="ProofChange - Evidence Center",
     page_icon=":mag:",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 ui.inject_styles()
 
 
 # ---------------------------------------------------------------------------
-# Sidebar navigation
+# Session state
 # ---------------------------------------------------------------------------
+
+if "view" not in st.session_state:
+    st.session_state["view"] = "landing"
+if "pkg" not in st.session_state:
+    st.session_state.pkg = None
+if "run_error" not in st.session_state:
+    st.session_state.run_error = None
+
+# ---------------------------------------------------------------------------
+# Landing page — shown before the dashboard
+# ---------------------------------------------------------------------------
+
+if st.session_state["view"] == "landing":
+    # Remove Streamlit's default top padding so the iframe fills edge-to-edge
+    st.markdown(
+        "<style>#root>div:first-child{padding-top:0!important}"
+        ".block-container{padding:0!important;max-width:100%!important}</style>",
+        unsafe_allow_html=True,
+    )
+    if ui.landing_page():
+        st.session_state["view"] = "dashboard"
+        st.rerun()
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Sidebar navigation (only visible in dashboard view)
+# ---------------------------------------------------------------------------
+
+if st.sidebar.button("← Back to Home", use_container_width=True, key="sidebar_home"):
+    st.session_state["view"] = "landing"
+    st.rerun()
 
 st.sidebar.markdown(
     """
@@ -48,6 +83,7 @@ PAGES = [
     "Generated Tests",
     "Verification",
     "Evidence",
+    "Live PR Test",
     "GitHub",
     "IBM Bob",
 ]
@@ -62,16 +98,6 @@ st.sidebar.caption(
     "Demo Mode analyzes the bundled demo_repo and executes pytest "
     "locally. No GitHub credentials required."
 )
-
-
-# ---------------------------------------------------------------------------
-# Session state
-# ---------------------------------------------------------------------------
-
-if "pkg" not in st.session_state:
-    st.session_state.pkg = None
-if "run_error" not in st.session_state:
-    st.session_state.run_error = None
 
 
 def _run() -> None:
@@ -197,6 +223,11 @@ elif page == "Test Gaps":
     if not gaps:
         st.success("No test gaps detected for the analyzed change.")
     else:
+        _LEVEL_COLOUR = {
+            "STRONG": "#16a34a",
+            "PARTIAL": "#d97706",
+            "INSUFFICIENT": "#dc2626",
+        }
         for g in gaps:
             st.markdown(
                 '<div class="pc-card" style="margin-bottom:0.75rem">'
@@ -212,6 +243,57 @@ elif page == "Test Gaps":
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+            # ----------------------------------------------------------------
+            # Gap Simulator
+            # ----------------------------------------------------------------
+            _sim_run_key = f"sim_run_{g['id']}"
+            _sim_res_key = f"sim_result_{g['id']}"
+
+            if st.button(
+                "⚡ Simulate addressing this gap",
+                key=f"sim_btn_{g['id']}",
+            ):
+                st.session_state[_sim_run_key] = True
+                # Clear any prior result so the spinner fires each click.
+                st.session_state.pop(_sim_res_key, None)
+
+            if st.session_state.get(_sim_run_key) and _sim_res_key not in st.session_state:
+                with st.spinner(f"Simulating fix for {g['id']}…"):
+                    _gap_obj = TestGap(**{k: v for k, v in g.items()})
+                    _fn_obj = FunctionInfo(
+                        name=g["function"],
+                        lineno=0,
+                        args=[],
+                        source_path="src/pricing.py",
+                    )
+                    _adapter = BobAdapter()
+                    _new_tests = generate_tests(
+                        [_gap_obj], [_fn_obj], _adapter, "demo_repo/tests"
+                    )
+                    _sim_level, _sim_rationale = simulate_with_generated_tests(
+                        pkg, _new_tests
+                    )
+                    st.session_state[_sim_res_key] = (
+                        _sim_level, _sim_rationale, _new_tests
+                    )
+
+            if st.session_state.get(_sim_res_key):
+                _sim_level, _sim_rationale, _new_tests = st.session_state[_sim_res_key]
+                _cur_level = pkg.to_dict()["evidence"]["level"]
+                _cur_col = _LEVEL_COLOUR.get(_cur_level, "#1f2328")
+                _sim_col = _LEVEL_COLOUR.get(_sim_level, "#1f2328")
+                st.markdown(
+                    f'<div class="pc-card" style="margin-top:0.5rem;background:#f0fdf4;">'
+                    f'<strong>Simulation result for {g["id"]}</strong><br>'
+                    f'Current: <strong style="color:{_cur_col}">{_cur_level}</strong>'
+                    f' &rarr; With this test: <strong style="color:{_sim_col}">{_sim_level}</strong><br>'
+                    f'<span style="color:#475569;font-size:0.85rem">{_sim_rationale}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                if _new_tests:
+                    st.code(_new_tests[0].code, language="python")
 
 
 elif page == "Generated Tests":
@@ -363,6 +445,115 @@ elif page == "GitHub":
         "sandbox (isolated containers, ephemeral runners, restricted "
         "network, minimal credentials, resource/time limits)."
     )
+
+elif page == "Live PR Test":
+    ui.hero()
+    st.markdown("### Live GitHub PR Analysis")
+    st.write(
+        "Analyze a real GitHub PR end-to-end: fetch the diff, clone "
+        "the branch, run the ProofChange pipeline, and post a Check "
+        "Run back to GitHub. No terminal commands needed."
+    )
+
+    # Configuration check
+    import os as _os
+    _app_id = _os.environ.get("GITHUB_APP_ID", "").strip()
+    _key_path = _os.environ.get("GITHUB_PRIVATE_KEY_PATH", "").strip()
+    _install_id = _os.environ.get("GITHUB_INSTALLATION_ID", "").strip()
+    _cfg_ok = bool(_app_id and _key_path and _install_id and _os.path.exists(_key_path))
+
+    if not _cfg_ok:
+        st.error(
+            "GitHub App credentials are not configured. Fill in "
+            "`GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY_PATH`, and "
+            "`GITHUB_INSTALLATION_ID` in your `.env` file."
+        )
+    else:
+        st.success(
+            f"GitHub App configured (App ID: {_app_id}, "
+            f"Installation: {_install_id})"
+        )
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        repo_input = st.text_input(
+            "Repository",
+            value="Zeeshantariqpkn/proofchange-test",
+            help="Full name: owner/repo",
+        )
+    with col2:
+        pr_input = st.number_input(
+            "PR number",
+            min_value=1,
+            value=1,
+            step=1,
+        )
+
+    post_check = st.checkbox(
+        "Post Check Run back to GitHub",
+        value=True,
+        help="If checked, ProofChange will post a status check to the PR.",
+    )
+
+    if st.button("▶ Run Live Analysis", type="primary", disabled=not _cfg_ok):
+        from live_pr import run_live_pr_analysis, LivePRError
+
+        log_container = st.empty()
+        log_lines: list[str] = []
+
+        def _progress(msg: str) -> None:
+            log_lines.append(msg)
+            log_container.code("\n".join(log_lines), language="text")
+
+        try:
+            with st.spinner("Running live analysis…"):
+                result = run_live_pr_analysis(
+                    repo=repo_input,
+                    pr_number=int(pr_input),
+                    post_check=post_check,
+                    progress=_progress,
+                )
+            st.session_state["live_pr_result"] = result
+            st.success("Live analysis complete.")
+        except LivePRError as exc:
+            st.error(f"Live PR analysis failed: {exc}")
+        except Exception as exc:
+            st.error(f"Unexpected error: {exc}")
+
+    # Display the last result if present
+    if "live_pr_result" in st.session_state:
+        r = st.session_state["live_pr_result"]
+        st.markdown("---")
+        st.markdown("#### Result")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Evidence", r["evidence"]["level"])
+        c2.metric(
+            "Tests",
+            f"{r['execution']['passed']}/{r['execution']['tests_executed']}",
+        )
+        c3.metric("Gaps", r["testing"]["test_gaps"])
+        c4.metric("Generated", r["testing"]["generated_tests"])
+
+        st.markdown(
+            f"**PR:** [{r.get('_pr_html_url') or 'n/a'}]"
+            f"({r.get('_pr_html_url') or '#'})  \n"
+            f"**Check Run posted:** "
+            f"{'✅ yes' if r.get('_check_posted') else '— no'}"
+        )
+
+        with st.expander("Rationale"):
+            st.info(r["evidence"]["rationale"])
+
+        with st.expander("Full Evidence Package (JSON)"):
+            st.json(r)
+
+        st.download_button(
+            "⬇ Download Evidence JSON",
+            data=__import__("json").dumps(r, indent=2),
+            file_name=f"proofchange_live_{r.get('commit', 'pr')}.json",
+            mime="application/json",
+        )
 
 
 elif page == "IBM Bob":

@@ -20,9 +20,10 @@ def _unparse(node: ast.AST) -> str:
 
 
 class _FunctionVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, path: str = "") -> None:
         self.functions: list[FunctionInfo] = []
         self.classes: list[str] = []
+        self._path = path
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.classes.append(node.name)
@@ -40,6 +41,7 @@ class _FunctionVisitor(ast.NodeVisitor):
             name=node.name,
             lineno=node.lineno,
             args=args,
+            source_path=self._path,
         )
 
         for child in ast.walk(node):
@@ -96,7 +98,7 @@ def analyze_source(source: str, path: str = "<unknown>") -> CodeAnalysis:
         analysis.parse_error = f"{type(exc).__name__}: {exc}"
         return analysis
 
-    visitor = _FunctionVisitor()
+    visitor = _FunctionVisitor(path=path)
     visitor.visit(tree)
     analysis.functions = visitor.functions
     analysis.classes = visitor.classes

@@ -1,4 +1,4 @@
-"""Pricing rules for the test repository."""
+"""Pricing rules for the demo repository."""
 
 
 def calculate_discount(price, customer_type):

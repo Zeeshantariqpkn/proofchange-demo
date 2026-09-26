@@ -14,7 +14,8 @@ from typing import Iterable
 from engine.models import BranchInfo, FunctionInfo, TestGap, TestMap
 
 # Common literal patterns we can extract as scenario descriptions.
-_LITERAL_RE = re.compile(r"""['"]([^'"]+)['"]""")
+# Use a backreference so opening and closing quotes must match.
+_LITERAL_RE = re.compile(r"""(['"])([^'"]+)\1""")
 
 
 def _scenario_label(branch: BranchInfo) -> str:
@@ -26,15 +27,24 @@ def _scenario_label(branch: BranchInfo) -> str:
 
     literals = _LITERAL_RE.findall(expr)
     if literals:
+        # findall returns (quote_char, content) tuples due to the two groups.
         # e.g. customer_type == "vip"  ->  'vip' customer
-        head = literals[0]
+        head = literals[0][1]
         return f"{head} scenario"
 
     # Fallback: use the raw expression
     return expr
 
 
+_HIGH_SEVERITY_KEYWORDS = frozenset(
+    ("auth", "admin", "permission", "token", "secret", "password", "role", "security")
+)
+
+
 def _branch_severity(branch: BranchInfo) -> str:
+    expr_lower = (branch.expression or "").lower()
+    if any(kw in expr_lower for kw in _HIGH_SEVERITY_KEYWORDS):
+        return "high"
     if branch.kind in ("if", "elif"):
         return "medium"
     return "low"
@@ -62,8 +72,26 @@ def detect_gaps(
             if mt.docstring:
                 covered.add(mt.docstring.lower())
 
+        # Emit a low-severity gap for functions with no tests and no branches.
+        if not fn.branches:
+            if not mapped:
+                gaps.append(
+                    TestGap(
+                        id=_make_gap_id(counter),
+                        function=fn.name,
+                        scenario="no branch coverage",
+                        reason=f"Function '{fn.name}' has no mapped automated test.",
+                        severity="low",
+                        suggested_test=f"test_{re.sub(r'[^a-z0-9]+', '_', fn.name.lower()).strip('_')}",
+                    )
+                )
+                counter += 1
+            continue
+
         for branch in fn.branches:
             label = _scenario_label(branch)
+            expr_display = branch.expression or label
+
             # Skip the default branch if any mapped test seems to hit the
             # "no match" path (heuristic: test names mention default/else/regular).
             if branch.kind == "else":
@@ -71,20 +99,29 @@ def detect_gaps(
                     continue
 
             # Does any mapped test mention this scenario?
-            scenario_key = label.split()[0].lower()
-            if not scenario_key:
+            # Use the full label (not just the first word) to reduce false positives
+            # on raw-expression labels like "customer_type == 'premium'".
+            scenario_key = label.lower()
+            # Also derive a short keyword: first word only when the label was
+            # produced from a string literal (contains "scenario"), otherwise
+            # use the whole label for matching.
+            if "scenario" in scenario_key:
+                match_key = label.split()[0].lower()
+            else:
+                match_key = scenario_key
+            if not match_key:
                 continue
-            hit = any(scenario_key in c for c in covered)
+            hit = any(match_key in c for c in covered)
             if hit:
                 continue
 
-            suggested = "test_" + re.sub(r"[^a-z0-9]+", "_", scenario_key).strip("_")
+            suggested = "test_" + re.sub(r"[^a-z0-9]+", "_", label.split()[0].lower()).strip("_")
             gaps.append(
                 TestGap(
                     id=_make_gap_id(counter),
                     function=fn.name,
                     scenario=label,
-                    reason=f"Branch '{branch.expression}' has no mapped automated test.",
+                    reason=f"Branch '{expr_display}' has no mapped automated test.",
                     severity=_branch_severity(branch),
                     suggested_test=suggested,
                 )

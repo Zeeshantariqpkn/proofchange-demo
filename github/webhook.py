@@ -15,7 +15,7 @@ from fastapi import Header, HTTPException, Request
 
 
 def verify_signature(body: bytes, signature_header: str, secret: str) -> bool:
-    if not signature_header or not secret:
+    if not signature_header or not isinstance(signature_header, str) or not secret:
         return False
     if not signature_header.startswith("sha256="):
         return False
@@ -32,9 +32,23 @@ async def parse_github_webhook(
     secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "").strip()
     body = await request.body()
 
+    # FastAPI may pass Header objects if defaults aren't resolved; normalize.
+    event = x_github_event if isinstance(x_github_event, str) else None
+    signature = (
+        x_hub_signature_256 if isinstance(x_hub_signature_256, str) else None
+    )
+
+    # Fall back to reading directly from request headers if needed.
+    if signature is None:
+        signature = request.headers.get("X-Hub-Signature-256", "")
+    if event is None:
+        event = request.headers.get("X-GitHub-Event", "unknown")
+
     if secret:
-        if not verify_signature(body, x_hub_signature_256 or "", secret):
-            raise HTTPException(status_code=401, detail="invalid webhook signature")
+        if not verify_signature(body, signature or "", secret):
+            raise HTTPException(
+                status_code=401, detail="invalid webhook signature"
+            )
 
     try:
         payload = json.loads(body.decode("utf-8"))
@@ -42,12 +56,14 @@ async def parse_github_webhook(
         raise HTTPException(status_code=400, detail=f"invalid JSON: {exc}") from exc
 
     return {
-        "event": x_github_event or "unknown",
+        "event": event or "unknown",
         "payload": payload,
     }
 
 
-def extract_pr_event(event: str, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+def extract_pr_event(
+    event: str, payload: dict[str, Any]
+) -> Optional[dict[str, Any]]:
     """Return a normalized PR event, or None if not a supported event."""
     if event != "pull_request":
         return None

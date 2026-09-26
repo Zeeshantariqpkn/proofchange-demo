@@ -116,13 +116,13 @@ def run_demo_pipeline(
 
     # 7. Impact summary
     impact = summarize_impact(
-    diff,
-    [code_analysis],
-    tests,
-    gaps,
-    generated_tests=generated,
-    execution_passed=execution.passed,
-)
+        diff,
+        [code_analysis],
+        tests,
+        gaps,
+        generated_tests=generated,
+        execution_passed=execution.passed,
+    )
 
     # 8. Evidence package
     pkg = evidence_engine.build_package(
@@ -162,9 +162,15 @@ def analyze_custom_diff(
     pr_title: str = "",
     source_root: str = "",
     tests_root: str = "",
+    repo_root: str = "",
     data_dir: str = "./data",
 ) -> EvidencePackage:
-    """Analyze an arbitrary diff. Requires on-disk source and tests."""
+    """Analyze an arbitrary diff. Requires on-disk source and tests.
+
+    repo_root is the directory where pytest should run (usually the
+    repo's root, which contains tests/ and pytest.ini). If not given,
+    it's inferred as the parent of source_root.
+    """
     diff = diff_analyzer.analyze_diff(diff_text)
 
     code_analyses: list[CodeAnalysis] = []
@@ -188,9 +194,25 @@ def analyze_custom_diff(
         tests_root=tests_root or "./tests",
     )
 
-    execution = run_pytest(source_root or ".") if source_root else ExecutionResult()
+    # Determine where to run pytest: explicit repo_root wins, else
+    # fall back to source_root's parent.
+    if repo_root:
+        pytest_dir = repo_root
+    elif source_root:
+        pytest_dir = os.path.dirname(os.path.abspath(source_root))
+    else:
+        pytest_dir = "."
 
-    impact = summarize_impact(diff, code_analyses, tests, gaps)
+    execution = run_pytest(pytest_dir) if os.path.isdir(pytest_dir) else ExecutionResult()
+
+    impact = summarize_impact(
+        diff,
+        code_analyses,
+        tests,
+        gaps,
+        generated_tests=generated,
+        execution_passed=execution.passed,
+    )
     pkg = evidence_engine.build_package(
         diff=diff,
         code_analyses=code_analyses,

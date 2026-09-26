@@ -20,6 +20,7 @@ from engine.models import (
     TestGap,
     TestMap,
 )
+from engine.impact_analyzer import PathSummary
 
 
 def _now_iso() -> str:
@@ -50,10 +51,10 @@ def _compute_level(
 
     targeted = {g.targets_gap for g in generated_tests if g.targets_gap}
     unaddressed = [g for g in gaps if g.id not in targeted]
-    high = [g for g in gaps if g.severity == "high"]
+    unaddressed_high = [g for g in unaddressed if g.severity == "high"]
 
-    if high:
-        return "PARTIAL", f"{len(high)} high-severity gap(s) remain."
+    if unaddressed_high:
+        return "PARTIAL", f"{len(unaddressed_high)} high-severity gap(s) remain unaddressed."
 
     ratio = (verified_paths / analyzed_paths) if analyzed_paths else 0.0
     if unaddressed or ratio < 0.7:
@@ -77,7 +78,7 @@ def build_package(
     gaps: list[TestGap],
     generated_tests: list[GeneratedTest],
     execution: ExecutionResult,
-    impact: dict[str, Any],
+    impact: PathSummary,
     repository: str = "demo_repo",
     commit: str = "",
     pr_number: int | None = None,
@@ -88,10 +89,10 @@ def build_package(
 
     existing_tests = len(tests.all_tests)
 
-    analyzed_paths = impact.get("functions_affected", 0) or 1
-    verified = impact.get("verified_paths", 0)
-    partial = impact.get("partial_paths", 0)
-    unresolved = impact.get("unresolved_paths", 0)
+    analyzed_paths = impact.functions_affected or 1
+    verified = impact.verified_paths
+    partial = impact.partial_paths
+    unresolved = impact.unresolved_paths
 
     level, rationale = _compute_level(
         gaps, generated_tests, execution, analyzed_paths, verified
@@ -112,8 +113,8 @@ def build_package(
         ],
         change={
             "files_changed": diff.files_changed,
-            "functions_affected": impact.get("functions_affected", 0),
-            "function_names": impact.get("function_names", []),
+            "functions_affected": impact.functions_affected,
+            "function_names": impact.function_names,
         },
         testing={
             "existing_tests": existing_tests,
@@ -147,6 +148,76 @@ def build_package(
         },
     )
     return pkg
+
+
+def simulate_with_generated_tests(
+    pkg: EvidencePackage,
+    additional_tests: list[GeneratedTest],
+) -> tuple[str, str]:
+    """Return the (level, rationale) the package WOULD have if *additional_tests*
+    were merged and all currently-passing tests still pass.
+
+    The simulation is a pure projection: no files are written and no
+    subprocess is launched.  The execution counters are optimistically
+    bumped by the number of additional tests (all assumed to pass), and
+    the full gap list is re-evaluated with the combined generated set.
+
+    ``verified_paths`` is also projected: any function that was previously
+    *partial* (has a mapped test but an unaddressed gap) becomes *verified*
+    once all of its gaps are targeted by the combined generated set.
+
+    Args:
+        pkg:              The current Change Evidence Package.
+        additional_tests: Generated tests to simulate as merged (typically
+                          the one test produced for a specific gap).
+
+    Returns:
+        A ``(level, rationale)`` tuple identical in shape to what
+        :func:`_compute_level` returns.
+    """
+    d = pkg.to_dict()
+    gaps = [
+        TestGap(**{k: v for k, v in g.items()})
+        for g in d["artifacts"]["gaps"]
+    ]
+    existing_gen = [
+        GeneratedTest(**{k: v for k, v in gt.items()})
+        for gt in d["artifacts"]["generated_tests"]
+    ]
+    combined = existing_gen + additional_tests
+
+    ex = d["execution"]
+    sim_execution = ExecutionResult(
+        exit_code=0,
+        total=ex["tests_executed"] + len(additional_tests),
+        passed=ex["passed"] + len(additional_tests),
+        failed=ex["failed"],
+        skipped=ex["skipped"],
+        duration_s=ex["duration_s"],
+    )
+
+    analyzed_paths = d["change"]["functions_affected"] or 1
+    paths = d["paths"]
+
+    # Project verified_paths: functions that were partial (mapped test + gap)
+    # become verified if all their gaps are now targeted by the combined set.
+    combined_targeted = {gt.targets_gap for gt in combined if gt.targets_gap}
+    extra_verified = 0
+    if additional_tests:
+        # For each function currently in partial state, check whether all of
+        # its gaps are now covered by the combined generated set.
+        partial_functions: set[str] = set()
+        for g in gaps:
+            if g.id not in {gt.targets_gap for gt in existing_gen if gt.targets_gap}:
+                partial_functions.add(g.function)
+        for fn_name in partial_functions:
+            fn_gaps = [g for g in gaps if g.function == fn_name]
+            if all(g.id in combined_targeted for g in fn_gaps):
+                extra_verified += 1
+
+    verified_paths = paths["verified"] + extra_verified
+
+    return _compute_level(gaps, combined, sim_execution, analyzed_paths, verified_paths)
 
 
 def save_package(pkg: EvidencePackage, data_dir: str) -> str:
