@@ -11,8 +11,10 @@ the verification pipeline runs real code.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+from collections import defaultdict
 from typing import Any
 
 from ai.bob_adapter import BobAdapter
@@ -23,15 +25,59 @@ def _safe_identifier(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", name).strip("_") or "scenario"
 
 
+def _import_line(function: FunctionInfo) -> str:
+    """Derive the import statement from the function's source_path.
+
+    Falls back to 'src.pricing' only when no source path is available
+    (e.g. tests against the demo pipeline without a real file path).
+    """
+    path = function.source_path
+    if not path:
+        return f"from src.pricing import {function.name}\n"
+
+    # Normalise separators and strip leading path components up to the
+    # first Python package marker (a directory that looks like a module).
+    # e.g. "demo_repo/src/pricing.py"  →  "src.pricing"
+    #      "myproject/lib/utils.py"    →  "lib.utils"
+    norm = path.replace("\\", "/")
+    # Strip common leading roots: anything before the first directory
+    # that doesn't look like a repo/workspace wrapper.
+    # Strategy: drop the first component if it doesn't contain an __init__
+    # sibling (we can't check the filesystem here, so we strip the first
+    # component only if path has 3+ parts).
+    parts = [p for p in norm.split("/") if p and p != "."]
+    if parts and parts[-1].endswith(".py"):
+        parts[-1] = parts[-1][:-3]  # strip .py
+
+    # Drop leading component that is likely a repo root (e.g. "demo_repo").
+    if len(parts) >= 3:
+        parts = parts[1:]
+
+    module = ".".join(parts)
+    return f"from {module} import {function.name}\n"
+
+
 def _template_test(
     gap: TestGap,
     function: FunctionInfo,
     sample_inputs: dict[str, Any] | None = None,
 ) -> str:
-    """Deterministic pytest test matching the documented Bob style.
+    """Return a deterministic pytest test body matching the documented Bob style.
 
-    We produce a real, runnable test that exercises the changed branch.
-    The test is intentionally simple and preserves existing conventions.
+    For the ``calculate_discount`` demo function, concrete assertions are
+    synthesized from the scenario name (vip / premium / default).  For all
+    other functions a placeholder test is emitted that raises ``AssertionError``
+    loudly so it is never silently skipped.
+
+    Args:
+        gap: The coverage gap the generated test should address.
+        function: Static analysis data for the function under test.
+        sample_inputs: Optional pre-computed input values (currently unused;
+            reserved for future LLM-assisted input synthesis).
+
+    Returns:
+        A string containing the body of one pytest test function (no import
+        line — the caller prepends that via :func:`_import_line`).
     """
     fn = function.name
     args = function.args
@@ -45,6 +91,16 @@ def _template_test(
             return (
                 "def test_vip_discount():\n"
                 "    assert calculate_discount(100, \"vip\") == 70\n"
+            )
+        if "premium" in scenario.lower():
+            return (
+                "def test_premium_discount():\n"
+                "    assert calculate_discount(100, \"premium\") == 80\n"
+            )
+        if "default" in scenario.lower() or "fallback" in scenario.lower():
+            return (
+                "def test_regular_discount():\n"
+                "    assert calculate_discount(100, \"regular\") == 100\n"
             )
         # Generic fallback for pricing
         key = _safe_identifier(scenario)
@@ -70,21 +126,35 @@ def _template_test(
     )
 
 
-def _import_line(function_name: str) -> str:
-    return f"from src.pricing import {function_name}\n"
-
-
 def generate_tests(
     gaps: list[TestGap],
     functions: list[FunctionInfo],
     adapter: BobAdapter,
     tests_root: str,
 ) -> list[GeneratedTest]:
-    """Generate tests for the given gaps.
+    """Generate :class:`~engine.models.GeneratedTest` records for every gap.
 
-    Returns GeneratedTest records. Does not write to disk — the caller
-    (the pipeline) is responsible for writing, so tests can be inspected
-    before execution.
+    Two code paths are tried in order:
+
+    1. **Runtime LLM** (opt-in) — if ``adapter.runtime_available`` is True the
+       adapter is called and its JSON output is parsed.  If the output is not a
+       valid JSON list the path falls through to the deterministic template.
+    2. **Deterministic Bob-assisted template** — always available; produces
+       runnable tests without any external API call.
+
+    The method does *not* write files to disk.  The caller (the pipeline) is
+    responsible for that step via :func:`write_generated_tests`, which allows
+    tests to be inspected or modified before execution.
+
+    Args:
+        gaps: Coverage gaps detected by the gap detector.
+        functions: Parsed function metadata for the files under change.
+        adapter: LLM adapter; checked for ``runtime_available`` before use.
+        tests_root: Directory under which ``test_generated.py`` is written.
+
+    Returns:
+        A list of :class:`~engine.models.GeneratedTest` objects, one per gap.
+        May be empty if *gaps* is empty.
     """
     generated: list[GeneratedTest] = []
     if not gaps:
@@ -102,12 +172,12 @@ def generate_tests(
         # recorded so the UI can be honest.
         # For the MVP we fall back to the deterministic template if the
         # LLM output is not parseable JSON. This keeps the demo reliable.
-        import json
+        llm_generated: list[GeneratedTest] = []
         try:
             items = json.loads(result.content)
             if isinstance(items, list):
                 for item in items:
-                    generated.append(
+                    llm_generated.append(
                         GeneratedTest(
                             test_name=item.get("test_name", "test_generated"),
                             file=item.get("file", "tests/test_generated.py"),
@@ -116,10 +186,12 @@ def generate_tests(
                             source="runtime_llm",
                         )
                     )
-                if generated:
-                    return generated
         except (json.JSONDecodeError, TypeError):
             pass
+
+        # Only use LLM output if we got a complete, non-empty list.
+        if llm_generated:
+            return llm_generated
 
     # Deterministic Bob-assisted path.
     fn_by_name = {f.name: f for f in functions}
@@ -127,10 +199,29 @@ def generate_tests(
     for gap in gaps:
         fn = fn_by_name.get(gap.function)
         if fn is None:
+            # Gap references a function not in the provided list — emit a
+            # placeholder so callers can see the gap was not skipped silently.
+            generated.append(
+                GeneratedTest(
+                    test_name=gap.suggested_test,
+                    file=target_file,
+                    code=(
+                        f"def {gap.suggested_test}():\n"
+                        f"    # Gap {gap.id}: function '{gap.function}' not found in "
+                        f"analyzed source.\n"
+                        f"    raise AssertionError(\n"
+                        f"        \"Cannot generate test: source function not available.\"\n"
+                        f"    )\n"
+                    ),
+                    targets_gap=gap.id,
+                    source="bob-assisted",
+                )
+            )
             continue
+
         code = _template_test(gap, fn)
         # Prepend the import for the module under test.
-        full = _import_line(fn.name) + "\n" + code
+        full = _import_line(fn) + "\n" + code
         generated.append(
             GeneratedTest(
                 test_name=gap.suggested_test,
@@ -145,14 +236,37 @@ def generate_tests(
 
 
 def write_generated_tests(generated: list[GeneratedTest]) -> list[str]:
-    """Write generated tests to disk. Returns the list of files written."""
-    written: list[str] = []
+    """Write *generated* test records to disk and return the written file paths.
+
+    Tests that share an output ``file`` path are grouped and written together
+    into a single file so that later records do not silently overwrite earlier
+    ones.  The output directory is created automatically if it does not exist.
+
+    Each output file starts with a two-line banner that identifies it as
+    auto-generated and safe to delete.
+
+    Args:
+        generated: Test records produced by :func:`generate_tests`.
+
+    Returns:
+        A deduplicated list of file paths that were written.  If *generated* is
+        empty the list is empty.
+    """
+    # Group by output file.
+    by_file: dict[str, list[GeneratedTest]] = defaultdict(list)
     for gt in generated:
-        os.makedirs(os.path.dirname(gt.file), exist_ok=True)
-        with open(gt.file, "w", encoding="utf-8") as fh:
+        by_file[gt.file].append(gt)
+
+    written: list[str] = []
+    for filepath, tests in by_file.items():
+        dir_part = os.path.dirname(filepath)
+        if dir_part:
+            os.makedirs(dir_part, exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as fh:
             fh.write("# Generated by ProofChange — Bob-assisted workflow\n")
             fh.write("# This file is safe to delete; it is regenerated on each run.\n\n")
-            fh.write(gt.code)
-            fh.write("\n")
-        written.append(gt.file)
+            for gt in tests:
+                fh.write(gt.code)
+                fh.write("\n")
+        written.append(filepath)
     return written
